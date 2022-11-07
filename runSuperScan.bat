@@ -1,0 +1,2 @@
+ipcSwordSuperScan.exe
+cmd

